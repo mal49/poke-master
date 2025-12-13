@@ -20,6 +20,48 @@ genai.configure(api_key=GEMINI_API_KEY)
 # Global state for search history and favorites
 search_history = []
 favorites = []
+conversation_history = []  # Store conversation context for intelligent responses
+
+# System prompt for the intelligent Pokémon assistant
+POKEMON_ASSISTANT_SYSTEM_PROMPT = """You are PokéAssistant, an enthusiastic and knowledgeable Pokémon expert AI assistant. You combine the conversational intelligence of a modern AI chatbot with deep expertise in all things Pokémon.
+
+## Your Personality:
+- Friendly, enthusiastic, and passionate about Pokémon
+- Use occasional Pokémon-themed expressions naturally (but don't overdo it)
+- Be helpful and encouraging, especially to newer trainers
+- Show genuine excitement when discussing rare or powerful Pokémon
+- Have opinions and preferences (you can have favorite Pokémon!)
+
+## Your Knowledge Covers:
+- All Pokémon from Generation 1-9 (stats, types, abilities, moves, evolutions)
+- Competitive battling strategies and team building
+- Game mechanics (type matchups, breeding, EVs/IVs, natures)
+- Pokémon games, anime, movies, and lore
+- Where to find/catch Pokémon in various games
+- Pokémon trivia and fun facts
+
+## How to Respond:
+1. Be conversational and natural - not robotic or overly formal
+2. If the user asks something vague, ask clarifying questions
+3. Provide helpful context even if not explicitly asked
+4. Use formatting (bold, lists) for clarity when giving detailed info
+5. If you notice the user is building a team, offer synergy suggestions
+6. Remember context from the conversation
+7. If asked about non-Pokémon topics, briefly acknowledge but gently steer back to Pokémon
+8. Be honest if you're uncertain about something
+
+## Response Style:
+- Keep responses concise but informative (2-4 paragraphs for most questions)
+- Use emojis sparingly and naturally (⚡🔥💧 for types, 🎮 for games, etc.)
+- Format lists and stats clearly
+- End with a follow-up question or suggestion when appropriate
+
+## Important Rules:
+- Always provide accurate Pokémon information
+- When discussing competitive viability, mention the context (casual, VGC, Smogon tiers)
+- If someone asks about a specific game, tailor advice to that game's mechanics
+- Be inclusive - all playstyles are valid (competitive, casual, shiny hunting, etc.)
+"""
 
 # Type effectiveness (simplified)
 type_chart = {
@@ -212,6 +254,22 @@ def detect_query_types(user_input):
     input_lower = user_input.lower()
     query_types = []
     
+    # Recommendation query - asking for Pokemon suggestions
+    if any(kw in input_lower for kw in ['recommend', 'suggest', 'give me a', 'good pokemon', 'best pokemon', 'which pokemon should']):
+        query_types.append('recommendation')
+    
+    # Team building query
+    if any(kw in input_lower for kw in ['team', 'build a team', 'create a team', 'team of', 'pokemon team']):
+        query_types.append('team_building')
+    
+    # Add to favorites query
+    if any(kw in input_lower for kw in ['add', 'favourite', 'favorite']) and any(kw in input_lower for kw in ['favourite', 'favorite', 'fav']):
+        query_types.append('add_favorite')
+    
+    # Type advantage query with generation filter
+    if any(kw in input_lower for kw in ['type advantage', 'super effective', 'effective against', 'advantage against']):
+        query_types.append('type_advantage')
+    
     # Comparison query
     if any(kw in input_lower for kw in ['compare', 'vs', 'versus', 'between', '1v1', 'matchup', 'who would win']):
         query_types.append('comparison')
@@ -228,7 +286,7 @@ def detect_query_types(user_input):
     if any(kw in input_lower for kw in ['evolution', 'evolve', 'evolves', 'evolution chain', 'evolve into']):
         query_types.append('evolution')
     
-    # Location
+    # Location with game context
     if any(kw in input_lower for kw in ['location', 'where', 'catch', 'find', 'found', 'habitat', 'encounter']):
         query_types.append('location')
     
@@ -260,6 +318,470 @@ def detect_query_types(user_input):
         query_types.append('general')
     
     return query_types
+
+def detect_game_context(user_input):
+    """Detect if user mentions a specific Pokemon game"""
+    input_lower = user_input.lower()
+    games = {
+        'sword': 'Pokemon Sword',
+        'shield': 'Pokemon Shield',
+        'scarlet': 'Pokemon Scarlet',
+        'violet': 'Pokemon Violet',
+        'brilliant diamond': 'Pokemon Brilliant Diamond',
+        'shining pearl': 'Pokemon Shining Pearl',
+        'legends arceus': 'Pokemon Legends: Arceus',
+        'sun': 'Pokemon Sun',
+        'moon': 'Pokemon Moon',
+        'ultra sun': 'Pokemon Ultra Sun',
+        'ultra moon': 'Pokemon Ultra Moon',
+        'x': 'Pokemon X',
+        'y': 'Pokemon Y',
+        'omega ruby': 'Pokemon Omega Ruby',
+        'alpha sapphire': 'Pokemon Alpha Sapphire',
+        'black': 'Pokemon Black',
+        'white': 'Pokemon White',
+        'black 2': 'Pokemon Black 2',
+        'white 2': 'Pokemon White 2',
+        'heartgold': 'Pokemon HeartGold',
+        'soulsilver': 'Pokemon SoulSilver',
+        'diamond': 'Pokemon Diamond',
+        'pearl': 'Pokemon Pearl',
+        'platinum': 'Pokemon Platinum',
+        'firered': 'Pokemon FireRed',
+        'leafgreen': 'Pokemon LeafGreen',
+        'ruby': 'Pokemon Ruby',
+        'sapphire': 'Pokemon Sapphire',
+        'emerald': 'Pokemon Emerald',
+        'gold': 'Pokemon Gold',
+        'silver': 'Pokemon Silver',
+        'crystal': 'Pokemon Crystal',
+        'red': 'Pokemon Red',
+        'blue': 'Pokemon Blue',
+        'yellow': 'Pokemon Yellow',
+        'lets go pikachu': "Pokemon Let's Go Pikachu",
+        'lets go eevee': "Pokemon Let's Go Eevee",
+    }
+    
+    for game_key, game_name in games.items():
+        if game_key in input_lower:
+            return game_name
+    return None
+
+def detect_generation(user_input):
+    """Detect if user mentions a specific generation"""
+    input_lower = user_input.lower()
+    
+    # Check for generation mentions
+    gen_patterns = {
+        'generation 1': 1, 'gen 1': 1, 'gen1': 1, 'generation i': 1, 'kanto': 1,
+        'generation 2': 2, 'gen 2': 2, 'gen2': 2, 'generation ii': 2, 'johto': 2,
+        'generation 3': 3, 'gen 3': 3, 'gen3': 3, 'generation iii': 3, 'hoenn': 3,
+        'generation 4': 4, 'gen 4': 4, 'gen4': 4, 'generation iv': 4, 'sinnoh': 4,
+        'generation 5': 5, 'gen 5': 5, 'gen5': 5, 'generation v': 5, 'unova': 5,
+        'generation 6': 6, 'gen 6': 6, 'gen6': 6, 'generation vi': 6, 'kalos': 6,
+        'generation 7': 7, 'gen 7': 7, 'gen7': 7, 'generation vii': 7, 'alola': 7,
+        'generation 8': 8, 'gen 8': 8, 'gen8': 8, 'generation viii': 8, 'galar': 8,
+        'generation 9': 9, 'gen 9': 9, 'gen9': 9, 'generation ix': 9, 'paldea': 9,
+    }
+    
+    for pattern, gen_num in gen_patterns.items():
+        if pattern in input_lower:
+            return gen_num
+    return None
+
+def get_pokemon_by_generation(generation):
+    """Get Pokemon ID ranges by generation"""
+    gen_ranges = {
+        1: (1, 151),
+        2: (152, 251),
+        3: (252, 386),
+        4: (387, 493),
+        5: (494, 649),
+        6: (650, 721),
+        7: (722, 809),
+        8: (810, 905),
+        9: (906, 1025),
+    }
+    return gen_ranges.get(generation, (1, 1025))
+
+def get_pokemon_with_type_advantage(target_pokemon_name, generation=None):
+    """Get Pokemon that have type advantage against a target Pokemon"""
+    target_data = get_pokemon_data(target_pokemon_name)
+    if not target_data:
+        return []
+    
+    target_types = [t['type']['name'] for t in target_data['types']]
+    
+    # Find types that are super effective against target
+    effective_types = set()
+    for target_type in target_types:
+        for attacker_type, matchups in type_chart.items():
+            if matchups.get(target_type, 1) > 1:
+                effective_types.add(attacker_type)
+    
+    # Get Pokemon of those types from the specified generation
+    result_pokemon = []
+    
+    if generation:
+        start_id, end_id = get_pokemon_by_generation(generation)
+    else:
+        start_id, end_id = 1, 898
+    
+    # Sample some Pokemon from the effective types
+    type_pokemon_map = {
+        'fire': ['charizard', 'arcanine', 'typhlosion', 'infernape', 'blaziken', 'cinderace'],
+        'water': ['blastoise', 'gyarados', 'feraligatr', 'empoleon', 'greninja', 'inteleon'],
+        'grass': ['venusaur', 'sceptile', 'torterra', 'serperior', 'rillaboom', 'decidueye'],
+        'electric': ['pikachu', 'raichu', 'jolteon', 'ampharos', 'luxray', 'zeraora'],
+        'ice': ['articuno', 'lapras', 'glaceon', 'weavile', 'mamoswine', 'frosmoth'],
+        'fighting': ['machamp', 'lucario', 'conkeldurr', 'blaziken', 'infernape', 'urshifu'],
+        'poison': ['nidoking', 'gengar', 'crobat', 'toxicroak', 'dragalge', 'toxtricity'],
+        'ground': ['garchomp', 'hippowdon', 'excadrill', 'landorus', 'sandaconda', 'mudsdale'],
+        'flying': ['dragonite', 'togekiss', 'staraptor', 'braviary', 'corviknight', 'talonflame'],
+        'psychic': ['alakazam', 'espeon', 'gardevoir', 'metagross', 'reuniclus', 'hatterene'],
+        'bug': ['scizor', 'heracross', 'volcarona', 'golisopod', 'orbeetle', 'frosmoth'],
+        'rock': ['tyranitar', 'aerodactyl', 'rhyperior', 'gigalith', 'coalossal', 'lycanroc'],
+        'ghost': ['gengar', 'mismagius', 'chandelure', 'aegislash', 'dragapult', 'spectrier'],
+        'dragon': ['dragonite', 'salamence', 'garchomp', 'hydreigon', 'dragapult', 'kommo-o'],
+        'dark': ['umbreon', 'tyranitar', 'absol', 'hydreigon', 'grimmsnarl', 'zarude'],
+        'steel': ['metagross', 'scizor', 'lucario', 'ferrothorn', 'corviknight', 'duraludon'],
+        'fairy': ['togekiss', 'gardevoir', 'sylveon', 'mimikyu', 'hatterene', 'grimmsnarl'],
+        'normal': ['snorlax', 'blissey', 'staraptor', 'cinccino', 'diggersby', 'obstagoon']
+    }
+    
+    # Gen 4 specific Pokemon for each type
+    gen4_pokemon = {
+        'fire': ['infernape', 'magmortar', 'heatran'],
+        'water': ['empoleon', 'floatzel', 'gastrodon'],
+        'grass': ['torterra', 'roserade', 'leafeon'],
+        'electric': ['luxray', 'electivire', 'magnezone'],
+        'ice': ['weavile', 'mamoswine', 'glaceon', 'froslass'],
+        'fighting': ['lucario', 'infernape', 'gallade', 'toxicroak'],
+        'poison': ['toxicroak', 'drapion', 'roserade'],
+        'ground': ['garchomp', 'hippowdon', 'rhyperior', 'mamoswine', 'gliscor'],
+        'flying': ['staraptor', 'honchkrow', 'togekiss', 'gliscor'],
+        'psychic': ['gallade', 'bronzong', 'uxie', 'mesprit', 'azelf'],
+        'bug': ['yanmega', 'vespiquen'],
+        'rock': ['rhyperior', 'rampardos', 'probopass'],
+        'ghost': ['dusknoir', 'mismagius', 'spiritomb', 'rotom', 'froslass', 'giratina'],
+        'dragon': ['garchomp', 'dialga', 'palkia', 'giratina'],
+        'dark': ['weavile', 'honchkrow', 'drapion', 'spiritomb', 'darkrai'],
+        'steel': ['lucario', 'magnezone', 'bronzong', 'empoleon', 'dialga', 'heatran'],
+        'fairy': ['togekiss'],  # Fairy type didn't exist in Gen 4, but Togekiss was retconned
+    }
+    
+    for eff_type in effective_types:
+        if generation == 4:
+            pokemon_list = gen4_pokemon.get(eff_type, [])
+        else:
+            pokemon_list = type_pokemon_map.get(eff_type, [])
+        
+        for poke in pokemon_list:
+            if poke not in result_pokemon:
+                # Verify the Pokemon exists and has the right type
+                poke_data = get_pokemon_data(poke)
+                if poke_data:
+                    poke_types = [t['type']['name'] for t in poke_data['types']]
+                    if eff_type in poke_types:
+                        result_pokemon.append({
+                            'name': poke,
+                            'types': poke_types,
+                            'advantage_type': eff_type
+                        })
+    
+    return result_pokemon[:10]  # Return up to 10 Pokemon
+
+def get_gemini_recommendation(user_input):
+    """Get AI recommendation for a good Pokemon based on user's request"""
+    prompt = (
+        f"You are a Pokémon expert. The user asked: '{user_input}'\n"
+        f"Recommend 3-5 good Pokémon based on their request. For each Pokémon, explain briefly why it's a good choice.\n"
+        f"Consider factors like: versatility, strength, typing, availability, and popularity.\n"
+        f"Format your response with the Pokémon names in bold (**name**) and keep explanations concise (1-2 sentences each).\n"
+        f"Start by naming your top recommendation clearly."
+    )
+    try:
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        response = model.generate_content(prompt)
+        if response and response.text:
+            return response.text.strip()
+        raise Exception("Empty response")
+    except Exception as e:
+        # Fallback recommendations
+        recommendations = [
+            ("**Garchomp**", "A powerful Dragon/Ground type with excellent stats and movepool. Great for both casual and competitive play."),
+            ("**Tyranitar**", "A versatile Rock/Dark pseudo-legendary that can fill many roles on a team."),
+            ("**Lucario**", "A popular Fighting/Steel type with good offensive stats and a cool design."),
+            ("**Gengar**", "A fast Ghost/Poison type special attacker that's been a fan favorite since Gen 1."),
+            ("**Dragonite**", "The original pseudo-legendary with great bulk, power, and the Multiscale ability."),
+        ]
+        result = "🌟 **Here are some great Pokémon recommendations:**\n\n"
+        for name, reason in recommendations:
+            result += f"• {name}: {reason}\n\n"
+        return result
+
+def get_gemini_location_with_game(pokemon_name, game_name):
+    """Get location info for a Pokemon in a specific game"""
+    prompt = (
+        f"Where can I catch {pokemon_name.capitalize()} in {game_name}?\n"
+        f"Provide specific location(s), method of encounter (grass, fishing, trade, etc.), "
+        f"and any special conditions (time of day, weather, etc.).\n"
+        f"If {pokemon_name.capitalize()} is not available in {game_name}, clearly state that and suggest alternatives.\n"
+        f"Keep the response concise but informative (3-5 sentences)."
+    )
+    try:
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        response = model.generate_content(prompt)
+        if response and response.text:
+            return response.text.strip()
+        raise Exception("Empty response")
+    except Exception as e:
+        return f"📍 I couldn't fetch specific location data for {pokemon_name.capitalize()} in {game_name}. Try checking a dedicated Pokémon database like Serebii or Bulbapedia for detailed location information."
+
+def analyze_user_input_with_ai(user_input):
+    """
+    Use Gemini AI to intelligently analyze user input for intent, parameters,
+    inconsistencies, and potential issues. Returns structured analysis.
+    """
+    import json
+    
+    prompt = f"""You are an intelligent input analyzer for a Pokémon chatbot. Analyze the following user input and return a JSON response.
+
+USER INPUT: "{user_input}"
+
+Analyze the input and return ONLY a valid JSON object (no markdown, no explanation) with these fields:
+
+{{
+    "is_valid": true/false,
+    "intent": "team_building" | "recommendation" | "pokemon_info" | "comparison" | "type_advantage" | "location" | "moves" | "abilities" | "evolution" | "trivia" | "battle_scenario" | "add_favorite" | "general_question" | "unclear",
+    "errors": ["list of critical errors that prevent processing, empty if none"],
+    "warnings": ["list of warnings or clarifications needed, empty if none"],
+    "parameters": {{
+        "team_size": number or null (if team building, what size? standard is 6, max is 6),
+        "pokemon_mentioned": ["list of pokemon names mentioned"],
+        "types_mentioned": ["list of pokemon types mentioned"],
+        "generation": number or null (1-9 if mentioned),
+        "game_mentioned": "game name or null",
+        "count_requested": number or null (how many pokemon they want),
+        "exclusions": ["things to exclude like 'no legendaries'"],
+        "constraints": ["special constraints like 'only fire type', 'from gen 4'"]
+    }},
+    "clarification_needed": "question to ask user if intent is unclear, or null",
+    "adjusted_request": "what the system should actually do based on analysis, or null"
+}}
+
+IMPORTANT RULES:
+1. If user asks for a team of more than 6, set team_size to 6 and add a warning
+2. If user asks for a team of 0 or negative, set is_valid to false with an error
+3. If user asks for generation outside 1-9, set is_valid to false with an error
+4. If the request has contradictions (e.g., "fire type water pokemon"), add a warning
+5. If the request is ambiguous, set clarification_needed
+6. Detect if user is asking multiple unrelated questions and warn them
+7. If input seems like gibberish or spam, set is_valid to false
+8. Be smart about understanding natural language variations
+
+Return ONLY the JSON object, nothing else."""
+
+    try:
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        response = model.generate_content(prompt)
+        
+        if response and response.text:
+            # Clean up the response - remove markdown code blocks if present
+            text = response.text.strip()
+            if text.startswith("```json"):
+                text = text[7:]
+            if text.startswith("```"):
+                text = text[3:]
+            if text.endswith("```"):
+                text = text[:-3]
+            text = text.strip()
+            
+            # Parse JSON
+            analysis = json.loads(text)
+            
+            # Ensure required fields exist
+            analysis.setdefault('is_valid', True)
+            analysis.setdefault('intent', 'general_question')
+            analysis.setdefault('errors', [])
+            analysis.setdefault('warnings', [])
+            analysis.setdefault('parameters', {})
+            analysis.setdefault('clarification_needed', None)
+            analysis.setdefault('adjusted_request', None)
+            
+            # Add original input
+            analysis['original_input'] = user_input
+            
+            return analysis
+    except json.JSONDecodeError as e:
+        # Fallback if JSON parsing fails
+        pass
+    except Exception as e:
+        # Fallback for any other error
+        pass
+    
+    # Fallback to basic analysis if AI fails
+    return analyze_user_input_fallback(user_input)
+
+def analyze_user_input_fallback(user_input):
+    """
+    Fallback analysis using regex patterns if AI analysis fails.
+    """
+    import re
+    
+    input_lower = user_input.lower().strip()
+    analysis = {
+        'original_input': user_input,
+        'is_valid': True,
+        'intent': 'general_question',
+        'warnings': [],
+        'errors': [],
+        'parameters': {},
+        'clarification_needed': None,
+        'adjusted_request': None
+    }
+    
+    # Empty or too short input
+    if len(input_lower) < 2:
+        analysis['errors'].append("❌ Input too short. Please provide more details.")
+        analysis['is_valid'] = False
+        return analysis
+    
+    # Team size detection
+    team_patterns = [
+        r'team\s+of\s+(\d+)',
+        r'(\d+)\s+pokemon\s+team',
+        r'(\d+)\s+member\s+team',
+    ]
+    
+    is_team_request = any(kw in input_lower for kw in ['team', 'build a team', 'create a team', 'party'])
+    
+    for pattern in team_patterns:
+        match = re.search(pattern, input_lower)
+        if match:
+            team_size = int(match.group(1))
+            if team_size < 1:
+                analysis['errors'].append(f"❌ Invalid team size: {team_size}. A team must have at least 1 Pokémon.")
+                analysis['is_valid'] = False
+            elif team_size > 6:
+                analysis['warnings'].append(f"⚠️ You requested {team_size} Pokémon, but max team size is 6. I'll create a team of 6.")
+                analysis['parameters']['team_size'] = 6
+            else:
+                analysis['parameters']['team_size'] = team_size
+                if team_size != 6 and is_team_request:
+                    analysis['warnings'].append(f"📝 Creating a team of {team_size} Pokémon (not the standard 6).")
+            break
+    
+    # Generation validation
+    gen_match = re.search(r'gen(?:eration)?\s*(\d+)', input_lower)
+    if gen_match:
+        gen_num = int(gen_match.group(1))
+        if gen_num < 1 or gen_num > 9:
+            analysis['errors'].append(f"❌ Invalid generation: {gen_num}. Pokémon generations range from 1 to 9.")
+            analysis['is_valid'] = False
+        else:
+            analysis['parameters']['generation'] = gen_num
+    
+    # Multiple questions detection
+    if input_lower.count('?') > 1:
+        analysis['warnings'].append(f"📝 You asked multiple questions. For best results, ask one at a time.")
+    
+    return analysis
+
+def analyze_user_input(user_input):
+    """
+    Main entry point for input analysis. Uses AI for smart analysis.
+    """
+    return analyze_user_input_with_ai(user_input)
+
+def format_analysis_warnings(analysis):
+    """Format analysis warnings and errors into HTML"""
+    html = ""
+    
+    if analysis.get('errors'):
+        html += '<div style="padding: 15px; background: rgba(248, 81, 73, 0.15); border-radius: 12px; border: 2px solid #f85149; margin-bottom: 15px;">'
+        for error in analysis['errors']:
+            # Add emoji if not present
+            if not any(error.startswith(e) for e in ['❌', '⚠️', '📝', '💡']):
+                error = f"❌ {error}"
+            html += f'<p style="color: #f85149; margin: 5px 0;">{error}</p>'
+        html += '</div>'
+    
+    if analysis.get('warnings'):
+        html += '<div style="padding: 15px; background: rgba(255, 203, 5, 0.15); border-radius: 12px; border: 2px solid #ffcb05; margin-bottom: 15px;">'
+        for warning in analysis['warnings']:
+            # Add emoji if not present
+            if not any(warning.startswith(e) for e in ['❌', '⚠️', '📝', '💡']):
+                warning = f"⚠️ {warning}"
+            html += f'<p style="color: #ffcb05; margin: 5px 0;">{warning}</p>'
+        html += '</div>'
+    
+    # Show clarification needed if present
+    if analysis.get('clarification_needed'):
+        html += '<div style="padding: 15px; background: rgba(88, 166, 255, 0.15); border-radius: 12px; border: 2px solid #58a6ff; margin-bottom: 15px;">'
+        html += f'<p style="color: #58a6ff; margin: 5px 0;">💬 {analysis["clarification_needed"]}</p>'
+        html += '</div>'
+    
+    # Show adjusted request if present
+    if analysis.get('adjusted_request'):
+        html += '<div style="padding: 15px; background: rgba(59, 185, 80, 0.15); border-radius: 12px; border: 2px solid #3fb950; margin-bottom: 15px;">'
+        html += f'<p style="color: #3fb950; margin: 5px 0;">💡 {analysis["adjusted_request"]}</p>'
+        html += '</div>'
+    
+    return html
+
+def get_gemini_team_builder(user_input, required_pokemon=None, team_size=6):
+    """Build a team of Pokemon based on user's request with validated team size"""
+    
+    # Ensure team size is valid
+    team_size = max(1, min(team_size, 6))
+    
+    prompt = (
+        f"You are a Pokémon team building expert. The user requested: '{user_input}'\n"
+    )
+    if required_pokemon:
+        prompt += f"The team MUST include: {required_pokemon.capitalize()}\n"
+    
+    prompt += (
+        f"Create a balanced team of exactly {team_size} Pokémon. Consider:\n"
+        f"1. Type coverage (minimize shared weaknesses)\n"
+        f"2. Role diversity (attacker, tank, support, etc.)\n"
+        f"3. Synergy between team members\n\n"
+        f"For each Pokémon, provide:\n"
+        f"- Name (in bold)\n"
+        f"- Type(s)\n"
+        f"- Role on the team (1 sentence)\n\n"
+        f"Format the response clearly with all {team_size} Pokémon numbered from 1 to {team_size}.\n"
+        f"IMPORTANT: Output EXACTLY {team_size} Pokémon, no more, no less."
+    )
+    try:
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        response = model.generate_content(prompt)
+        if response and response.text:
+            return response.text.strip()
+        raise Exception("Empty response")
+    except Exception as e:
+        # Fallback team - adjusted for team size
+        base_team = [
+            ("Garchomp", "Dragon/Ground - Physical sweeper with great coverage"),
+            ("Togekiss", "Fairy/Flying - Special attacker and support"),
+            ("Tyranitar", "Rock/Dark - Bulky attacker with Sand Stream"),
+            ("Ferrothorn", "Grass/Steel - Defensive wall with hazards"),
+            ("Rotom-Wash", "Electric/Water - Defensive pivot with only one weakness"),
+            ("Cinderace", "Fire - Fast physical attacker with Libero"),
+        ]
+        
+        if required_pokemon:
+            team = [(required_pokemon.capitalize(), "Your requested Pokémon")]
+            team.extend(base_team[:team_size - 1])
+        else:
+            team = base_team[:team_size]
+        
+        result = f"🎮 **Here's your balanced team of {team_size} Pokémon:**\n\n"
+        for i, (name, role) in enumerate(team, 1):
+            result += f"{i}. **{name}** - {role}\n\n"
+        result += f"\n💡 This team of {team_size} has good type coverage and role diversity!"
+        return result
 
 def find_counter_types(target_types):
     effective_types = set()
@@ -538,22 +1060,86 @@ def get_gemini_battle_scenario(user_pokemon, opponent_pokemon, user_data, oppone
         
         return speed_analysis + type_analysis + strategy
 
-def get_gemini_qa(question):
-    """Handle natural language Q&A about Pokémon with fallback"""
-    prompt = (
-        f"You are a Pokémon expert assistant. Answer this question about Pokémon: {question}\n"
-        f"Be informative, accurate, and engaging. If the question is about game mechanics, lore, or strategy, "
-        f"provide detailed but concise answers (3-5 sentences). Use emojis to make it fun!"
-    )
+def get_intelligent_response(user_message, pokemon_context=None):
+    """
+    Generate an intelligent, conversational response using Gemini with full context.
+    This is the main AI brain of the chatbot - handles all types of queries naturally.
+    """
+    global conversation_history
+    
+    # Build context from recent conversation (last 10 exchanges)
+    conversation_context = ""
+    if conversation_history:
+        recent_history = conversation_history[-10:]
+        conversation_context = "\n## Recent Conversation:\n"
+        for entry in recent_history:
+            conversation_context += f"User: {entry['user']}\nAssistant: {entry['assistant'][:500]}...\n\n"
+    
+    # Build Pokemon data context if available
+    pokemon_data_context = ""
+    if pokemon_context:
+        pokemon_data_context = f"\n## Relevant Pokémon Data (from PokéAPI):\n{pokemon_context}\n"
+    
+    # Build user preferences context
+    preferences_context = ""
+    if favorites:
+        preferences_context += f"\n## User's Favorite Pokémon: {', '.join([p.capitalize() for p in favorites])}\n"
+    if search_history:
+        preferences_context += f"## Recently Searched: {', '.join([p.capitalize() for p in search_history[:5]])}\n"
+    
+    # Create the full prompt
+    full_prompt = f"""{POKEMON_ASSISTANT_SYSTEM_PROMPT}
+
+{conversation_context}
+{pokemon_data_context}
+{preferences_context}
+
+## Current User Message:
+{user_message}
+
+## Instructions for this response:
+- Respond naturally and conversationally
+- If the user's message relates to their favorites or recent searches, acknowledge that connection
+- If you need more information to give a good answer, ask follow-up questions
+- If the user seems to be building towards something (like team building), proactively help
+- Keep the response focused but don't be too brief - be helpful and thorough
+- If the question is completely unrelated to Pokémon, briefly acknowledge it but gently redirect to Pokémon topics
+- Use markdown formatting for clarity (bold, lists, etc.)
+
+Respond now:"""
+
     try:
         model = genai.GenerativeModel("gemini-1.5-flash")
-        response = model.generate_content(prompt)
+        response = model.generate_content(full_prompt)
+        
         if response and response.text:
-            return response.text.strip()
+            assistant_response = response.text.strip()
+            
+            # Store in conversation history
+            conversation_history.append({
+                'user': user_message,
+                'assistant': assistant_response
+            })
+            
+            # Keep history manageable (last 20 exchanges)
+            if len(conversation_history) > 20:
+                conversation_history = conversation_history[-20:]
+            
+            return assistant_response
         raise Exception("Empty response")
     except Exception as e:
         # Fallback response
-        return f"🤔 I'm having trouble connecting to my knowledge base right now.\n\n**Your question:** {question}\n\n💡 **Tip:** Try searching for a specific Pokémon name to get detailed information from the PokéAPI database!"
+        return f"🤔 I'm having a moment here! Let me try to help anyway.\n\n**You asked:** {user_message}\n\n💡 **Tip:** Try asking about a specific Pokémon, or I can help you build a team, find counters, or discuss battle strategies!"
+
+def get_gemini_qa(question):
+    """Legacy function - now routes to intelligent response"""
+    return get_intelligent_response(question)
+
+def clear_conversation_history():
+    """Clear the conversation history for a fresh start"""
+    global conversation_history
+    conversation_history = []
+    return "🔄 Conversation cleared! Let's start fresh. What would you like to know about Pokémon?"
 
 # ============== UI HELPER FUNCTIONS ==============
 
@@ -654,7 +1240,7 @@ def get_favorites_html():
 
 def chat_response(user_input, show_shiny=False):
     """Main chat response function"""
-    global search_history
+    global search_history, favorites
     
     # Cry section HTML (visible for normal queries)
     cry_section_html = '<p style="color: #8b949e; margin: 10px 0 5px; font-size: 0.85rem;">🔊 Pokémon Cry</p>'
@@ -662,10 +1248,197 @@ def chat_response(user_input, show_shiny=False):
     if not user_input.strip():
         return None, "Please enter a Pokémon name or question!", "", "", "<p style='color: #8b949e;'>Enter a Pokémon name to see its description.</p>", "", "", "", "", get_history_html(), get_favorites_html(), cry_section_html, gr.update(visible=True)
 
+    # ============== INPUT ANALYSIS ==============
+    # Analyze user input for validation and parameter extraction
+    input_analysis = analyze_user_input(user_input)
+    
+    # If there are critical errors, return early with error message
+    if not input_analysis['is_valid'] and input_analysis['errors']:
+        error_html = format_analysis_warnings(input_analysis)
+        error_html += '<p style="color: #8b949e; margin-top: 15px;">Please try again with a valid request.</p>'
+        return None, "# ❌ Input Error", "", "", error_html, "", "", "", "", get_history_html(), get_favorites_html(), "", gr.update(visible=False)
+
     query_types = detect_query_types(user_input)
+    game_context = detect_game_context(user_input)
+    generation = detect_generation(user_input)
+    
+    # Handle "add to favorites" command directly
+    if 'add_favorite' in query_types:
+        pokemon_name = extract_pokemon_name(user_input)
+        if pokemon_name:
+            # Add to favorites and show the Pokemon info
+            if pokemon_name not in favorites:
+                favorites.append(pokemon_name)
+            
+            # Get Pokemon data to show
+            data = get_pokemon_data(pokemon_name)
+            if data:
+                add_to_history(pokemon_name)
+                name = data['name'].capitalize()
+                types = [t['type']['name'] for t in data['types']]
+                stats = {s['stat']['name']: s['base_stat'] for s in data['stats']}
+                
+                if show_shiny:
+                    sprite = data['sprites']['other']['official-artwork'].get('front_shiny') or data['sprites'].get('front_shiny') or data['sprites']['front_default']
+                else:
+                    sprite = data['sprites']['other']['official-artwork']['front_default'] or data['sprites']['front_default']
+                
+                species_data = get_pokemon_species_data(pokemon_name)
+                desc = "No description available."
+                if species_data:
+                    for entry in species_data.get('flavor_text_entries', []):
+                        if entry['language']['name'] == 'en':
+                            desc = entry['flavor_text'].replace('\n', ' ').replace('\f', ' ')
+                            break
+                
+                type_badges = create_type_badges(types)
+                stats_html = create_stats_html(stats)
+                counter_types = find_counter_types(types)
+                counter_names = suggest_counter_pokemon(counter_types)
+                
+                counter_html = ""
+                if counter_names:
+                    counter_html = " ".join([
+                        f'<span style="background: linear-gradient(135deg, #ee1515, #cc0000); color: white; padding: 6px 14px; border-radius: 20px; font-weight: bold; margin: 3px;">{c}</span>'
+                        for c in counter_names
+                    ])
+                
+                cry_url = data.get('cries', {}).get('latest', '') or data.get('cries', {}).get('legacy', '')
+                
+                desc_html = f'''
+                <div style="margin-top: 20px;">
+                    <div style="padding: 15px; background: linear-gradient(135deg, rgba(59, 185, 80, 0.2), rgba(22, 27, 34, 0.9)); border-radius: 12px; border: 2px solid #3fb950; margin-bottom: 15px;">
+                        <p style="color: #3fb950; font-weight: 600; margin: 0;">❤️ Added {name} to your favorites!</p>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+                        <span style="font-size: 1.1rem;">📖</span>
+                        <span style="color: #58a6ff; font-weight: 600;">Description</span>
+                    </div>
+                    <p style="color: #c9d1d9; line-height: 1.6; margin: 0;">{desc}</p>
+                </div>
+                '''
+                
+                return gr.update(value=sprite, visible=True), f"# {name}", type_badges, stats_html, desc_html, counter_html, "", cry_url, pokemon_name, get_history_html(), get_favorites_html(), cry_section_html, gr.update(visible=True)
+    
+    # Handle team building queries
+    if 'team_building' in query_types or input_analysis.get('intent') == 'team_building':
+        # Extract any required Pokemon from the query
+        required_pokemon = extract_pokemon_name(user_input)
+        
+        # Also check AI-detected pokemon
+        ai_pokemon = input_analysis.get('parameters', {}).get('pokemon_mentioned', [])
+        if ai_pokemon and not required_pokemon:
+            # Use first AI-detected pokemon
+            for poke in ai_pokemon:
+                if is_valid_pokemon(poke):
+                    required_pokemon = poke
+                    break
+        
+        # Get team size from AI analysis (default to 6)
+        team_size = 6
+        warnings_html = ""
+        
+        # Check for team_size from AI analysis
+        ai_team_size = input_analysis.get('parameters', {}).get('team_size')
+        if ai_team_size is not None:
+            team_size = max(1, min(int(ai_team_size), 6))
+        
+        # Format any warnings/errors from AI analysis
+        if input_analysis.get('warnings') or input_analysis.get('errors') or input_analysis.get('clarification_needed') or input_analysis.get('adjusted_request'):
+            warnings_html = format_analysis_warnings(input_analysis)
+        
+        team_response = get_gemini_team_builder(user_input, required_pokemon, team_size)
+        
+        answer_html = f'''
+        <div style="padding: 25px; background: rgba(22, 27, 34, 0.9); border-radius: 16px; border: 1px solid rgba(255,255,255,0.1);">
+            {warnings_html}
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 20px;">
+                <span style="font-size: 1.5rem;">🎮</span>
+                <h2 style="color: #ffcb05; margin: 0;">Team Builder ({team_size} Pokémon)</h2>
+            </div>
+            <div style="color: #c9d1d9; line-height: 1.8; white-space: pre-wrap;">{team_response}</div>
+        </div>
+        '''
+        return None, f"# 🎮 Pokémon Team Builder ({team_size} Pokémon)", "", "", answer_html, "", "", "", "", get_history_html(), get_favorites_html(), "", gr.update(visible=False)
+    
+    # Handle recommendation queries
+    if 'recommendation' in query_types or input_analysis.get('intent') == 'recommendation':
+        # Format any warnings from analysis
+        warnings_html = ""
+        if input_analysis.get('warnings') or input_analysis.get('clarification_needed') or input_analysis.get('adjusted_request'):
+            warnings_html = format_analysis_warnings(input_analysis)
+        
+        recommendation = get_gemini_recommendation(user_input)
+        answer_html = f'''
+        <div style="padding: 25px; background: rgba(22, 27, 34, 0.9); border-radius: 16px; border: 1px solid rgba(255,255,255,0.1);">
+            {warnings_html}
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 20px;">
+                <span style="font-size: 1.5rem;">🌟</span>
+                <h2 style="color: #ffcb05; margin: 0;">Pokémon Recommendations</h2>
+            </div>
+            <div style="color: #c9d1d9; line-height: 1.8; white-space: pre-wrap;">{recommendation}</div>
+        </div>
+        '''
+        return None, "# 🌟 Pokémon Recommendations", "", "", answer_html, "", "", "", "", get_history_html(), get_favorites_html(), "", gr.update(visible=False)
+    
+    # Handle type advantage queries with generation filter
+    if 'type_advantage' in query_types or input_analysis.get('intent') == 'type_advantage':
+        pokemon_name = extract_pokemon_name(user_input)
+        
+        # Also check AI-detected pokemon
+        if not pokemon_name:
+            ai_pokemon = input_analysis.get('parameters', {}).get('pokemon_mentioned', [])
+            for poke in ai_pokemon:
+                if is_valid_pokemon(poke):
+                    pokemon_name = poke
+                    break
+        
+        # Check AI-detected generation
+        if not generation:
+            generation = input_analysis.get('parameters', {}).get('generation')
+        
+        if pokemon_name:
+            # Format any warnings from analysis
+            warnings_html = ""
+            if input_analysis.get('warnings') or input_analysis.get('clarification_needed') or input_analysis.get('adjusted_request'):
+                warnings_html = format_analysis_warnings(input_analysis)
+            
+            advantage_pokemon = get_pokemon_with_type_advantage(pokemon_name, generation)
+            if advantage_pokemon:
+                gen_text = f" from Generation {generation}" if generation else ""
+                
+                pokemon_cards = ""
+                for poke in advantage_pokemon:
+                    poke_data = get_pokemon_data(poke['name'])
+                    if poke_data:
+                        sprite = poke_data['sprites']['front_default']
+                        type_badges = create_type_badges(poke['types'])
+                        pokemon_cards += f'''
+                        <div style="display: inline-block; background: rgba(0,0,0,0.3); border-radius: 12px; padding: 15px; margin: 8px; text-align: center; min-width: 140px;">
+                            <img src="{sprite}" style="width: 80px; height: 80px;" />
+                            <p style="color: #fff; font-weight: 600; margin: 8px 0 5px;">{poke['name'].capitalize()}</p>
+                            <div style="margin-bottom: 8px;">{type_badges}</div>
+                            <p style="color: #3fb950; font-size: 0.8rem; margin: 0;">Super effective with {poke['advantage_type']}</p>
+                        </div>
+                        '''
+                
+                answer_html = f'''
+                <div style="padding: 25px; background: rgba(22, 27, 34, 0.9); border-radius: 16px; border: 1px solid rgba(255,255,255,0.1);">
+                    {warnings_html}
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 20px;">
+                        <span style="font-size: 1.5rem;">⚔️</span>
+                        <h2 style="color: #f85149; margin: 0;">Pokémon with Type Advantage vs {pokemon_name.capitalize()}{gen_text}</h2>
+                    </div>
+                    <p style="color: #8b949e; margin-bottom: 20px;">These Pokémon can deal super effective damage:</p>
+                    <div style="display: flex; flex-wrap: wrap; justify-content: center;">
+                        {pokemon_cards}
+                    </div>
+                </div>
+                '''
+                return None, f"# ⚔️ Type Advantage vs {pokemon_name.capitalize()}", "", "", answer_html, "", "", "", "", get_history_html(), get_favorites_html(), "", gr.update(visible=False)
     
     # Handle comparison queries
-    if 'comparison' in query_types:
+    if 'comparison' in query_types or input_analysis.get('intent') == 'comparison':
         pokemon_pair = extract_two_pokemon(user_input)
         if pokemon_pair:
             return handle_comparison(pokemon_pair[0], pokemon_pair[1], show_shiny)
@@ -674,12 +1447,23 @@ def chat_response(user_input, show_shiny=False):
     pokemon_name = extract_pokemon_name(user_input)
     
     if not pokemon_name:
-        # Try to answer as a general Pokémon question
-        if any(kw in user_input.lower() for kw in ['pokemon', 'pokémon', 'type', 'game', 'battle', 'how', 'what', 'why', 'who']):
-            answer = get_gemini_qa(user_input)
-            answer_html = f'<div style="padding: 20px; background: rgba(22, 27, 34, 0.9); border-radius: 12px; border: 1px solid rgba(255,255,255,0.1);"><p style="color: #c9d1d9; line-height: 1.6; margin: 0;">{answer}</p></div>'
-            return None, "# 🤖 Pokémon Assistant", "", "", answer_html, "", "", "", "", get_history_html(), get_favorites_html(), "", gr.update(visible=False)
-        return None, "❌ No valid Pokémon name found!", "", "", "<p style='color: #f85149;'>Try entering a Pokémon name like 'Pikachu' or ask a Pokémon question.</p>", "", "", "", "", get_history_html(), get_favorites_html(), cry_section_html, gr.update(visible=True)
+        # Use intelligent response for ANY query - the AI will handle it naturally
+        # Format any warnings from analysis
+        warnings_html = ""
+        if input_analysis.get('warnings') or input_analysis.get('clarification_needed'):
+            warnings_html = format_analysis_warnings(input_analysis)
+        
+        # Get intelligent conversational response
+        answer = get_intelligent_response(user_input)
+        
+        # Format the response nicely
+        answer_html = f'''
+        <div style="padding: 25px; background: rgba(22, 27, 34, 0.9); border-radius: 16px; border: 1px solid rgba(255,255,255,0.1);">
+            {warnings_html}
+            <div style="color: #c9d1d9; line-height: 1.8; white-space: pre-wrap;">{answer}</div>
+        </div>
+        '''
+        return None, "# 🤖 PokéAssistant", "", "", answer_html, "", "", "", "", get_history_html(), get_favorites_html(), "", gr.update(visible=False)
 
     # Get Pokémon data
     data = get_pokemon_data(pokemon_name)
@@ -751,12 +1535,17 @@ def chat_response(user_input, show_shiny=False):
             extra_info.append(f"## 🔄 Evolution Chain\n{evo_text}")
     
     if 'location' in query_types:
-        locations = get_location_encounters(pokemon_name)
-        if locations:
-            loc_names = list(set([loc['location_area']['name'].replace('-', ' ').title() for loc in locations[:5]]))
-            extra_info.append(f"## 📍 Locations\n" + ", ".join(loc_names[:5]))
+        # Check if user specified a game
+        if game_context:
+            location_info = get_gemini_location_with_game(pokemon_name, game_context)
+            extra_info.append(f"## 📍 Location in {game_context}\n{location_info}")
         else:
-            extra_info.append("## 📍 Locations\nNo wild encounter data available (may be starter, legendary, or event Pokémon)")
+            locations = get_location_encounters(pokemon_name)
+            if locations:
+                loc_names = list(set([loc['location_area']['name'].replace('-', ' ').title() for loc in locations[:5]]))
+                extra_info.append(f"## 📍 Locations\n" + ", ".join(loc_names[:5]))
+            else:
+                extra_info.append("## 📍 Locations\nNo wild encounter data available (may be starter, legendary, or event Pokémon)")
     
     if 'trivia' in query_types:
         trivia = get_gemini_trivia(pokemon_name, data, species_data)
@@ -1269,10 +2058,13 @@ with gr.Blocks(title="Pokémon Battle Assistant") as demo:
         
         <div style="text-align: center; padding: 40px 20px 30px;">
             <h1 style="font-size: 2.5rem; font-weight: 700; color: #ffffff; margin-bottom: 8px; letter-spacing: -0.5px;">
-                <span style="color: #ffcb05;">⚡</span> Pokémon Battle Assistant <span style="color: #ffcb05;">⚡</span>
+                <span style="color: #ffcb05;">⚡</span> PokéAssistant <span style="color: #ffcb05;">⚡</span>
             </h1>
             <p style="color: #8b949e; font-size: 1.05rem;">
-                Powered by <span style="color: #58a6ff;">PokeAPI</span> + <span style="color: #f85149;">Google Gemini AI</span>
+                Your intelligent Pokémon companion • Powered by <span style="color: #f85149;">Gemini AI</span>
+            </p>
+            <p style="color: #58a6ff; font-size: 0.9rem; margin-top: 8px;">
+                Chat naturally about anything Pokémon! I remember our conversation 🧠
             </p>
         </div>
     """)
@@ -1283,21 +2075,23 @@ with gr.Blocks(title="Pokémon Battle Assistant") as demo:
             gr.HTML('''
                 <div class="card-section">
                     <div class="section-header">
-                        <span style="font-size: 1.2rem;">🔍</span>
-                        <span style="color: #ffffff; font-weight: 600; font-size: 1.1rem;">Search Pokémon</span>
+                        <span style="font-size: 1.2rem;">💬</span>
+                        <span style="color: #ffffff; font-weight: 600; font-size: 1.1rem;">Chat with PokéAssistant</span>
                     </div>
                 </div>
             ''')
             user_input = gr.Textbox(
-                placeholder="Enter Pokémon name, compare two, or ask a question...",
+                placeholder="Ask me anything about Pokémon! e.g., 'Who's your favorite starter?' or 'Help me build a team'",
                 label="",
                 show_label=False,
-                container=False
+                container=False,
+                lines=2
             )
             
             with gr.Row():
-                search_btn = gr.Button("⚔️ ANALYZE", variant="primary", size="lg")
+                search_btn = gr.Button("💬 SEND", variant="primary", size="lg")
                 random_btn = gr.Button("🎲", variant="secondary", size="lg")
+                new_chat_btn = gr.Button("🔄", variant="secondary", size="lg")
             
             # Shiny toggle
             shiny_toggle = gr.Checkbox(label="✨ Show Shiny", value=False)
@@ -1325,16 +2119,17 @@ with gr.Blocks(title="Pokémon Battle Assistant") as demo:
             gr.HTML('<p style="color: #8b949e; margin: 24px 0 12px; font-size: 0.85rem; font-weight: 500;">❤️ FAVORITES</p>')
             favorites_output = gr.HTML(get_favorites_html())
             
-            # Example queries
+            # Example queries - more conversational
             gr.HTML('''
                 <div style="margin-top: 20px; padding: 15px; background: rgba(22, 27, 34, 0.9); border-radius: 12px; border: 1px solid rgba(255,255,255,0.1);">
-                    <p style="color: #58a6ff; font-weight: 600; margin-bottom: 10px;">💡 Try asking:</p>
-                    <p style="color: #8b949e; font-size: 0.85rem; margin: 5px 0;">"Compare Charizard vs Blastoise"</p>
-                    <p style="color: #8b949e; font-size: 0.85rem; margin: 5px 0;">"What moves should Pikachu learn?"</p>
-                    <p style="color: #8b949e; font-size: 0.85rem; margin: 5px 0;">"Tell me trivia about Mewtwo"</p>
-                    <p style="color: #8b949e; font-size: 0.85rem; margin: 5px 0;">"Where can I catch Eevee?"</p>
-                    <p style="color: #8b949e; font-size: 0.85rem; margin: 5px 0;">"What are Gengar's abilities?"</p>
-                    <p style="color: #8b949e; font-size: 0.85rem; margin: 5px 0;">"My Pikachu is facing Onix"</p>
+                    <p style="color: #58a6ff; font-weight: 600; margin-bottom: 10px;">💬 Chat naturally:</p>
+                    <p style="color: #8b949e; font-size: 0.85rem; margin: 5px 0;">"Hey! What's a good starter for beginners?"</p>
+                    <p style="color: #8b949e; font-size: 0.85rem; margin: 5px 0;">"I love Eevee! What should I evolve it into?"</p>
+                    <p style="color: #8b949e; font-size: 0.85rem; margin: 5px 0;">"Help me build a competitive team"</p>
+                    <p style="color: #8b949e; font-size: 0.85rem; margin: 5px 0;">"Who would win: Mewtwo or Arceus?"</p>
+                    <p style="color: #8b949e; font-size: 0.85rem; margin: 5px 0;">"What's your favorite Pokémon?"</p>
+                    <p style="color: #8b949e; font-size: 0.85rem; margin: 5px 0;">"I'm stuck on the Elite Four, any tips?"</p>
+                    <p style="color: #8b949e; font-size: 0.85rem; margin: 5px 0;">"Tell me something cool about Gengar"</p>
                 </div>
             ''')
         
@@ -1402,6 +2197,46 @@ with gr.Blocks(title="Pokémon Battle Assistant") as demo:
     
     # Random Pokémon button
     random_btn.click(fn=random_pokemon_handler, inputs=[shiny_toggle], outputs=outputs)
+    
+    # New Chat button - clears conversation history
+    def handle_new_chat():
+        message = clear_conversation_history()
+        welcome_html = f'''
+        <div style="padding: 25px; background: rgba(22, 27, 34, 0.9); border-radius: 16px; border: 1px solid rgba(255,255,255,0.1);">
+            <div style="text-align: center; margin-bottom: 20px;">
+                <span style="font-size: 3rem;">👋</span>
+            </div>
+            <h2 style="color: #ffcb05; text-align: center; margin-bottom: 15px;">Welcome to PokéAssistant!</h2>
+            <p style="color: #c9d1d9; text-align: center; line-height: 1.8;">
+                {message}<br><br>
+                I'm your intelligent Pokémon companion! I can help you with:
+            </p>
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 20px;">
+                <div style="background: rgba(255,203,5,0.1); padding: 12px; border-radius: 10px; text-align: center;">
+                    <span style="font-size: 1.5rem;">🎮</span>
+                    <p style="color: #ffcb05; margin: 5px 0 0; font-size: 0.9rem;">Team Building</p>
+                </div>
+                <div style="background: rgba(248,81,73,0.1); padding: 12px; border-radius: 10px; text-align: center;">
+                    <span style="font-size: 1.5rem;">⚔️</span>
+                    <p style="color: #f85149; margin: 5px 0 0; font-size: 0.9rem;">Battle Strategy</p>
+                </div>
+                <div style="background: rgba(88,166,255,0.1); padding: 12px; border-radius: 10px; text-align: center;">
+                    <span style="font-size: 1.5rem;">📚</span>
+                    <p style="color: #58a6ff; margin: 5px 0 0; font-size: 0.9rem;">Pokémon Info</p>
+                </div>
+                <div style="background: rgba(59,185,80,0.1); padding: 12px; border-radius: 10px; text-align: center;">
+                    <span style="font-size: 1.5rem;">💬</span>
+                    <p style="color: #3fb950; margin: 5px 0 0; font-size: 0.9rem;">Casual Chat</p>
+                </div>
+            </div>
+            <p style="color: #8b949e; text-align: center; margin-top: 20px; font-size: 0.9rem;">
+                Just type naturally - I understand context and remember our conversation!
+            </p>
+        </div>
+        '''
+        return None, "# 🤖 PokéAssistant", "", "", welcome_html, "", "", "", "", get_history_html(), get_favorites_html(), "", gr.update(visible=False)
+    
+    new_chat_btn.click(fn=handle_new_chat, inputs=[], outputs=outputs)
     
     # Favorite button
     favorite_btn.click(fn=handle_favorite_toggle, inputs=[current_pokemon], outputs=[favorite_status, favorites_output])
