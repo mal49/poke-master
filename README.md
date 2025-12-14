@@ -1,6 +1,6 @@
-# ⚡ Pokémon Battle Assistant
+# ⚡ PokéAssistant
 
-A smart Pokémon battle assistant chatbot powered by **PokeAPI** and **Google Gemini AI**. Get detailed Pokémon stats, type matchups, counter suggestions, AI-generated battle tips, and much more!
+An intelligent Pokémon companion chatbot powered by **PokeAPI** and **Google Gemini AI**. Chat naturally with your AI assistant about Pokémon, get detailed stats, view beautiful sprites, and receive expert advice!
 
 ![Python](https://img.shields.io/badge/Python-3.8+-blue?logo=python)
 ![Gradio](https://img.shields.io/badge/Gradio-4.0+-orange?logo=gradio)
@@ -8,38 +8,36 @@ A smart Pokémon battle assistant chatbot powered by **PokeAPI** and **Google Ge
 
 ## 🎯 Overview
 
-This chatbot helps Pokémon trainers by providing:
+PokéAssistant is an intelligent chatbot that helps Pokémon trainers by providing:
 
+- **💬 Natural Language Chat** - Ask questions in plain English and get intelligent responses
 - **📊 Pokémon Stats** - View base stats (HP, Attack, Defense, Sp. Atk, Sp. Def, Speed) with visual stat bars
 - **🏷️ Type Information** - See Pokémon types with color-coded badges
-- **📖 Pokédex Descriptions** - Read official Pokémon descriptions from the games
-- **⚔️ Counter Suggestions** - Get recommended Pokémon that are effective against your target
-- **💡 AI Battle Tips** - Receive intelligent battle advice powered by Google Gemini AI
+- **💡 AI-Powered Responses** - Get expert advice and explanations powered by Google Gemini AI 2.0
 - **🔊 Pokémon Cries** - Listen to authentic Pokémon sound effects
+- **🌍 Multi-Language Support** - Available in English, Bahasa Melayu, and 中文 (Chinese)
 
 ## ✨ Features
 
 ### Core Features
-- Clean, modern dark-themed UI built with Gradio
-- Real-time Pokémon data from PokeAPI (Gen 1-8, 898+ Pokémon)
-- Type effectiveness calculations for counter suggestions
-- Quick pick buttons for popular Pokémon
-- AI-powered battle strategy explanations
-- Shareable public link option
+- **Modern Chat Interface** - Clean, dark-themed UI built with Gradio
+- **Real-time Pokémon Data** - Fetches live data from PokeAPI (898+ Pokémon)
+- **Intelligent Conversation** - Maintains conversation context for natural interactions
+- **Sentiment Analysis** - Detects user mood and adapts responses accordingly
+- **Domain Guardrails** - Ensures conversations stay Pokémon-related
+- **Shareable Public Link** - Instantly share your assistant with others
 
 ### Advanced Features
-- **⚔️ Pokémon Comparison** - Compare two Pokémon side-by-side with detailed stat breakdowns, type matchups, and AI analysis (e.g., "Compare Charizard vs Blastoise")
-- **🎯 Move Recommendations** - Get AI-suggested optimal movesets (e.g., "What moves should Pikachu learn?")
-- **⚡ Ability Information** - View detailed ability descriptions including hidden abilities (e.g., "What are Gengar's abilities?")
-- **🔄 Evolution Chains** - See complete evolution paths (e.g., "How does Eevee evolve?")
-- **📍 Location Data** - Find where to catch Pokémon in the games (e.g., "Where can I catch Eevee?")
-- **🎲 Fun Trivia** - Discover interesting facts about any Pokémon (e.g., "Tell me trivia about Mewtwo")
-- **🎮 Battle Scenarios** - Get strategic advice for specific matchups (e.g., "My Pikachu is facing Onix")
+- **🌍 Multi-Language Support** - Switch between English 🇬🇧, Bahasa Melayu 🇲🇾, and 中文 🇨🇳
+- **💬 Chat History** - View your conversation history with timestamps
+- **🗑️ History Management** - Clear chat history when needed
 - **✨ Shiny Sprites** - Toggle to view shiny Pokémon variants
 - **🎲 Random Pokémon** - Discover new Pokémon with the random button
 - **❤️ Favorites** - Save your favorite Pokémon for quick access
-- **📜 Search History** - Quick access to recently searched Pokémon
-- **🤖 Natural Language Q&A** - Ask general Pokémon questions
+- **📜 Search History** - Quick access to recently searched Pokémon (up to 10)
+- **🎨 Beautiful Visualizations** - Type badges with official colors and animated stat bars
+- **🔊 Audio Support** - Listen to Pokémon cries from the official games
+- **🤖 Context-Aware Responses** - AI remembers your conversation and favorite Pokémon
 
 ## 🛠️ Installation
 
@@ -84,38 +82,50 @@ This chatbot helps Pokémon trainers by providing:
    python main.py
    ```
 
-6. **Access the chatbot**
+6. **Run the application**
+   ```bash
+   python main.py
+   ```
+
+7. **Access the chatbot**
    
-   Open your browser and go to the local URL shown in the terminal (usually `http://127.0.0.1:7860`)
+   The application will launch with:
+   - A local URL (usually `http://127.0.0.1:7860`)
+   - A shareable public link for easy sharing
    
-   A shareable public link will also be generated automatically.
+   Open either URL in your browser to start chatting!
 
 ## 🎮 Usage
 
-### Basic Search
-- Type any Pokémon name in the search box and click "ANALYZE" or press Enter
-- Use Quick Pick buttons for instant analysis of popular Pokémon
-- Click the 🎲 button for a random Pokémon
+### Getting Started
+1. Enter your question or Pokémon name in the chat input box
+2. Click **SEND** or press Enter to get a response
+3. Use the **RANDOM** button to discover random Pokémon
+4. Toggle **✨ Show Shiny** to view shiny sprite variants
+
+### Language Selection
+- Click **🇬🇧 English**, **🇲🇾 Bahasa Melayu**, or **🇨🇳 中文** to switch languages
+- The entire interface and AI responses will adapt to your selected language
 
 ### Example Queries
 
 | Query Type | Example |
 |------------|---------|
-| Basic Info | `Pikachu` |
-| Comparison | `Compare Charizard vs Blastoise` |
-| Movesets | `What moves should Pikachu learn?` |
-| Abilities | `What are Gengar's abilities?` |
-| Evolution | `How does Eevee evolve?` |
-| Location | `Where can I catch Eevee?` |
-| Trivia | `Tell me trivia about Mewtwo` |
-| Battle Scenario | `My Pikachu is facing Onix` |
-| Height/Weight | `How tall is Charizard?` |
-| General Q&A | `What is the strongest dragon type?` |
+| Basic Info | `Who is Garchomp?` or just `Pikachu` |
+| Stats & Abilities | `What are Garchomp's stats?` or `What moves does it learn?` |
+| Team Building | `Build a team` or `What's a good team?` |
+| Comparisons | `Compare Charizard vs Blastoise` |
+| Strategy | `How do I beat Garchomp?` |
+| General Q&A | `What is the strongest dragon type?` or `Tell me about fire types` |
 
-### Features
+### Interactive Features
 - **✨ Shiny Toggle** - Enable to see shiny sprite variants
-- **❤️ Favorites** - Click to save Pokémon to your favorites list
-- **🔊 Pokémon Cry** - Listen to the Pokémon's authentic cry sound
+- **❤️ Add to Favorites** - Click to save Pokémon to your favorites list
+- **🎲 Random** - Click to discover a random Pokémon (1-898)
+- **📜 Recent Searches** - Click on any Pokémon name in the history to view it again
+- **💬 Chat History** - Scroll through your conversation history
+- **🗑️ Clear History** - Remove all chat history to start fresh
+- **🔊 Pokémon Cry** - Audio player appears automatically when viewing Pokémon
 
 ## 📁 Project Structure
 
@@ -123,19 +133,42 @@ This chatbot helps Pokémon trainers by providing:
 poke-master/
 ├── main.py           # Main application file with all logic and UI
 ├── requirements.txt  # Python dependencies
-├── .env              # Environment variables (create this)
+├── .env              # Environment variables (create this - not in repo)
 ├── .gitignore        # Git ignore file
 ├── README.md         # This file
-└── venv/             # Virtual environment (optional)
+└── venv/             # Virtual environment (optional, not in repo)
 ```
+
+## 🔑 Environment Variables
+
+Create a `.env` file in the project root with your Gemini API key:
+
+```env
+GEMINI_API_KEY=your_gemini_api_key_here
+```
+
+**Getting a Gemini API Key:**
+1. Visit [Google AI Studio](https://makersuite.google.com/app/apikey)
+2. Sign in with your Google account
+3. Click "Create API Key"
+4. Copy the key and add it to your `.env` file
 
 ## 🔧 Technologies Used
 
 - **[Gradio](https://gradio.app/)** - Web UI framework (v4.0+)
 - **[PokeAPI](https://pokeapi.co/)** - Comprehensive Pokémon data API
-- **[Google Gemini AI](https://ai.google.dev/)** - AI-powered battle tips and analysis (gemini-1.5-flash)
+- **[Google Gemini AI](https://ai.google.dev/)** - AI-powered conversational responses (Gemini 2.0 Flash Exp)
 - **[python-dotenv](https://pypi.org/project/python-dotenv/)** - Environment variable management
 - **[Requests](https://requests.readthedocs.io/)** - HTTP library for API calls
+
+## 🧠 How It Works
+
+1. **Natural Language Processing** - The AI extracts Pokémon names from your natural language queries
+2. **Real-time Data Fetching** - When a Pokémon is mentioned, data is fetched from PokeAPI
+3. **Context Injection** - Pokémon stats, types, and abilities are injected into the AI prompt for accurate responses
+4. **Conversation Memory** - The last 20 conversation turns are maintained for context-aware responses
+5. **Sentiment Analysis** - User sentiment is detected (positive, neutral, frustrated, curious) to adapt responses
+6. **Domain Guardrails** - Ensures all queries remain Pokémon-related
 
 ## 🎨 Type Color Reference
 
