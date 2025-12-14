@@ -22,8 +22,8 @@ genai.configure(api_key=GEMINI_API_KEY)
 # Global state for search history and favorites
 search_history = []
 favorites = []
-conversation_history = []  # Store conversation context for intelligent responses
-chat_display_history = []  # NEW: Store formatted chat messages for display
+conversation_history = []
+chat_sessions = []  # NEW: Store individual chat sessions
 
 # Language translations
 TRANSLATIONS = {
@@ -40,12 +40,14 @@ TRANSLATIONS = {
         'response': '📊 Assistant Response',
         'chat_history': '💬 CHAT HISTORY',
         'clear_history': '🗑️ Clear History',
+        'new_chat': '➕ New Chat',
         'no_searches': 'No recent searches',
         'no_favorites': 'No favorites yet',
         'no_history': 'No conversation history yet',
         'added_fav': '❤️ Added {name} to favorites!',
         'removed_fav': '💔 Removed {name} from favorites',
-        'history_cleared': '✅ Chat history cleared!'
+        'history_cleared': '✅ Chat history cleared!',
+        'language': 'Language'
     },
     'ms': {
         'title': 'PokéAssistant',
@@ -60,12 +62,14 @@ TRANSLATIONS = {
         'response': '📊 Respons Pembantu',
         'chat_history': '💬 SEJARAH SEMBANG',
         'clear_history': '🗑️ Padam Sejarah',
+        'new_chat': '➕ Sembang Baru',
         'no_searches': 'Tiada carian terkini',
         'no_favorites': 'Tiada kegemaran lagi',
         'no_history': 'Tiada sejarah perbualan lagi',
         'added_fav': '❤️ Menambah {name} ke kegemaran!',
         'removed_fav': '💔 Membuang {name} daripada kegemaran',
-        'history_cleared': '✅ Sejarah sembang dipadam!'
+        'history_cleared': '✅ Sejarah sembang dipadam!',
+        'language': 'Bahasa'
     },
     'zh': {
         'title': 'PokéAssistant',
@@ -80,16 +84,17 @@ TRANSLATIONS = {
         'response': '📊 助手回复',
         'chat_history': '💬 聊天记录',
         'clear_history': '🗑️ 清除记录',
+        'new_chat': '➕ 新对话',
         'no_searches': '没有最近的搜索',
         'no_favorites': '还没有收藏',
         'no_history': '还没有对话记录',
         'added_fav': '❤️ 已将{name}添加到收藏！',
         'removed_fav': '💔 已从收藏中移除{name}',
-        'history_cleared': '✅ 聊天记录已清除！'
+        'history_cleared': '✅ 聊天记录已清除！',
+        'language': '语言'
     }
 }
 
-# Refined System Prompt with Formatting Rules (with language support)
 def get_system_prompt(language='en'):
     lang_instruction = ""
     if language == 'ms':
@@ -115,28 +120,6 @@ Provide accurate, strategic, and engaging Pokémon advice. You have access to re
 ## Domain Constraint:
 You strictly discuss Pokémon, Nintendo, and related gaming culture. If a user asks about non-Pokémon topics (like math, cooking, politics), politely steer the conversation back to Pokémon (e.g., "I'm better at baking Poffins than cakes! Let's talk about your team.").
 """
-
-# Type effectiveness (simplified)
-type_chart = {
-    'fire': {'water': 0.5, 'grass': 2, 'ice': 2, 'bug': 2, 'rock': 0.5, 'dragon': 0.5, 'fire': 0.5, 'steel': 2},
-    'water': {'fire': 2, 'water': 0.5, 'grass': 0.5, 'ground': 2, 'rock': 2},
-    'grass': {'fire': 0.5, 'water': 2, 'grass': 0.5, 'poison': 0.5, 'flying': 0.5, 'bug': 0.5, 'dragon': 0.5, 'steel': 0.5, 'ground': 2, 'rock': 2},
-    'electric': {'water': 2, 'electric': 0.5, 'grass': 0.5, 'ground': 0, 'flying': 2},
-    'ice': {'fire': 0.5, 'water': 0.5, 'grass': 2, 'ice': 0.5, 'ground': 2, 'flying': 2, 'dragon': 2, 'steel': 0.5},
-    'fighting': {'normal': 2, 'ice': 2, 'poison': 0.5, 'flying': 0.5, 'psychic': 0.5, 'rock': 2, 'steel': 2, 'fairy': 0.5, 'ghost': 0, 'dark': 2},
-    'poison': {'grass': 2, 'poison': 0.5, 'ground': 0.5, 'rock': 0.5, 'steel': 0, 'fairy': 2},
-    'ground': {'fire': 2, 'electric': 2, 'grass': 0.5, 'poison': 2, 'flying': 0, 'bug': 0.5, 'rock': 2, 'steel': 2},
-    'flying': {'electric': 0.5, 'ice': 0.5, 'rock': 0.5, 'grass': 2, 'fighting': 2, 'bug': 2},
-    'psychic': {'fighting': 2, 'poison': 2, 'psychic': 0.5, 'steel': 0.5, 'dark': 0},
-    'bug': {'fire': 0.5, 'grass': 2, 'fighting': 0.5, 'poison': 0.5, 'flying': 0.5, 'psychic': 2, 'ghost': 0.5, 'steel': 0.5, 'fairy': 0.5, 'dark': 2},
-    'rock': {'fire': 2, 'ice': 2, 'fighting': 0.5, 'ground': 0.5, 'flying': 2, 'bug': 2, 'steel': 0.5},
-    'ghost': {'psychic': 2, 'ghost': 2, 'dark': 0.5, 'normal': 0},
-    'dragon': {'dragon': 2, 'steel': 0.5, 'fairy': 0},
-    'dark': {'psychic': 2, 'ghost': 2, 'dark': 0.5, 'fairy': 0.5, 'fighting': 0.5},
-    'steel': {'fire': 0.5, 'water': 0.5, 'electric': 0.5, 'ice': 2, 'rock': 2, 'steel': 0.5, 'fairy': 2},
-    'fairy': {'fighting': 2, 'dragon': 2, 'dark': 2, 'poison': 0.5, 'steel': 0.5, 'fire': 0.5},
-    'normal': {'rock': 0.5, 'ghost': 0, 'steel': 0.5}
-}
 
 # Type colors for badges
 TYPE_COLORS = {
@@ -187,6 +170,25 @@ def extract_pokemon_name(user_input):
     
     return None
 
+def extract_vs_pokemon(user_input):
+    """Extract two Pokemon names for VS comparisons"""
+    input_lower = user_input.lower()
+    
+    # Check for vs/versus patterns
+    if ' vs ' in input_lower or ' versus ' in input_lower or ' vs. ' in input_lower:
+        separator = ' vs ' if ' vs ' in input_lower else (' versus ' if ' versus ' in input_lower else ' vs. ')
+        parts = input_lower.split(separator)
+        
+        if len(parts) >= 2:
+            # Extract pokemon from each part
+            pokemon1 = extract_pokemon_name(parts[0])
+            pokemon2 = extract_pokemon_name(parts[1])
+            
+            if pokemon1 and pokemon2:
+                return pokemon1, pokemon2
+    
+    return None, None
+
 def get_pokemon_data(name):
     try:
         res = requests.get(f"https://pokeapi.co/api/v2/pokemon/{name.lower()}", timeout=5)
@@ -195,15 +197,7 @@ def get_pokemon_data(name):
     except:
         return None
 
-def get_pokemon_species_data(name):
-    try:
-        res = requests.get(f"https://pokeapi.co/api/v2/pokemon-species/{name.lower()}", timeout=5)
-        res.raise_for_status()
-        return res.json()
-    except:
-        return None
-
-# ============== NEW INTELLIGENCE FUNCTIONS ==============
+# ============== INTELLIGENCE FUNCTIONS ==============
 
 def check_domain_compliance(user_input):
     """Guardrail: Uses Gemini to ensure the query is related to Pokemon."""
@@ -218,38 +212,52 @@ def check_domain_compliance(user_input):
     Reply with only one word: "ALLOWED" or "BLOCKED".
     """
     try:
-        model = genai.GenerativeModel("gemini-2.0-flash-exp")
+        model = genai.GenerativeModel("gemini-2.5-flash-lite")
         response = model.generate_content(prompt)
         return "ALLOWED" in response.text.strip().upper()
     except:
         return True
 
-def get_intelligent_response(user_message, pokemon_context_data=None, sentiment="neutral", language='en'):
+def get_intelligent_response(user_message, pokemon_context_data=None, sentiment="neutral", language='en', session_history=None):
     """Generate an intelligent response with language support."""
-    global conversation_history
     
     conversation_context = ""
-    if conversation_history:
-        recent_history = conversation_history[-10:]
+    if session_history:
+        recent_history = session_history[-10:]
         conversation_context = "\n## Recent Conversation:\n"
         for entry in recent_history:
             conversation_context += f"User: {entry['user']}\nAssistant: {entry['assistant'][:500]}...\n\n"
             
     data_context = ""
     if pokemon_context_data:
-        p_name = pokemon_context_data.get('name', 'Unknown').capitalize()
-        types = [t['type']['name'] for t in pokemon_context_data.get('types', [])]
-        stats = {s['stat']['name']: s['base_stat'] for s in pokemon_context_data.get('stats', [])}
-        abilities = [a['ability']['name'] for a in pokemon_context_data.get('abilities', [])]
-        
-        data_context = f"""
-        [SYSTEM: REAL-TIME DATA INJECTION]
-        Use this verified data to answer the user:
-        - Pokémon: {p_name}
-        - Types: {', '.join(types)}
-        - Stats: {json.dumps(stats)}
-        - Abilities: {', '.join(abilities)}
-        """
+        if isinstance(pokemon_context_data, list):  # VS comparison
+            data_context = "\n[SYSTEM: REAL-TIME DATA INJECTION - VS COMPARISON]\n"
+            for idx, pdata in enumerate(pokemon_context_data, 1):
+                p_name = pdata.get('name', 'Unknown').capitalize()
+                types = [t['type']['name'] for t in pdata.get('types', [])]
+                stats = {s['stat']['name']: s['base_stat'] for s in pdata.get('stats', [])}
+                abilities = [a['ability']['name'] for a in pdata.get('abilities', [])]
+                
+                data_context += f"""
+                Pokémon {idx}: {p_name}
+                - Types: {', '.join(types)}
+                - Stats: {json.dumps(stats)}
+                - Abilities: {', '.join(abilities)}
+                """
+        else:  # Single pokemon
+            p_name = pokemon_context_data.get('name', 'Unknown').capitalize()
+            types = [t['type']['name'] for t in pokemon_context_data.get('types', [])]
+            stats = {s['stat']['name']: s['base_stat'] for s in pokemon_context_data.get('stats', [])}
+            abilities = [a['ability']['name'] for a in pokemon_context_data.get('abilities', [])]
+            
+            data_context = f"""
+            [SYSTEM: REAL-TIME DATA INJECTION]
+            Use this verified data to answer the user:
+            - Pokémon: {p_name}
+            - Types: {', '.join(types)}
+            - Stats: {json.dumps(stats)}
+            - Abilities: {', '.join(abilities)}
+            """
         
     preferences_context = ""
     if favorites:
@@ -273,17 +281,11 @@ User Message: {user_message}
 Respond now:"""
 
     try:
-        model = genai.GenerativeModel("gemini-2.0-flash-exp")
+        model = genai.GenerativeModel("gemini-2.5-flash-lite")
         response = model.generate_content(full_prompt)
         
         if response and response.text:
-            assistant_response = response.text.strip()
-            
-            conversation_history.append({'user': user_message, 'assistant': assistant_response})
-            if len(conversation_history) > 20:
-                conversation_history = conversation_history[-20:]
-                
-            return assistant_response
+            return response.text.strip()
             
         raise Exception("Empty response from AI")
 
@@ -316,10 +318,7 @@ def analyze_user_input(user_input):
     return {
         "is_valid": True,
         "intent": intent,
-        "sentiment": sentiment,
-        "errors": [],
-        "warnings": [],
-        "clarification_needed": None
+        "sentiment": sentiment
     }
 
 # ============== UI HELPER FUNCTIONS ==============
@@ -413,42 +412,57 @@ def get_favorites_html(language='en'):
         for p in favorites[:5]
     ])
 
-def get_chat_history_html(language='en'):
-    """NEW: Generate HTML for chat history display"""
-    global chat_display_history
-    if not chat_display_history:
-        return f'<div style="color: #8b949e; text-align: center; padding: 20px;">{TRANSLATIONS[language]["no_history"]}</div>'
+def get_chat_sessions_list(language='en'):
+    """Generate list of chat sessions"""
+    global chat_sessions
+    if not chat_sessions:
+        return []
     
-    html = '<div style="display: flex; flex-direction: column; gap: 12px; max-height: 400px; overflow-y: auto; padding: 10px;">'
-    for entry in reversed(chat_display_history[-10:]):  # Show last 10 messages
-        timestamp = entry.get('timestamp', '')
-        user_msg = entry.get('user', '')
-        ai_msg = entry.get('assistant', '')[:200] + '...' if len(entry.get('assistant', '')) > 200 else entry.get('assistant', '')
-        
-        html += f'''
-        <div style="background: rgba(88, 166, 255, 0.1); border-left: 3px solid #58a6ff; padding: 10px; border-radius: 8px;">
-            <div style="color: #58a6ff; font-size: 0.75rem; margin-bottom: 4px;">{timestamp}</div>
-            <div style="color: #c9d1d9; font-size: 0.85rem;"><strong>You:</strong> {user_msg}</div>
-        </div>
-        <div style="background: rgba(163, 113, 247, 0.1); border-left: 3px solid #a371f7; padding: 10px; border-radius: 8px;">
-            <div style="color: #c9d1d9; font-size: 0.85rem;"><strong>Assistant:</strong> {ai_msg}</div>
-        </div>
-        '''
-    html += '</div>'
-    return html
+    return [f"{session['timestamp']} - {session['title']}" for session in chat_sessions]
 
-def clear_chat_history(language='en'):
-    """NEW: Clear chat history"""
-    global chat_display_history, conversation_history
-    chat_display_history = []
-    conversation_history = []
-    return get_chat_history_html(language), TRANSLATIONS[language]['history_cleared']
+def create_new_chat_session(first_message, language='en'):
+    """Create a new chat session"""
+    global chat_sessions
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+    title = first_message[:30] + "..." if len(first_message) > 30 else first_message
+    
+    session = {
+        'id': len(chat_sessions),
+        'timestamp': timestamp,
+        'title': title,
+        'messages': [],
+        'language': language
+    }
+    chat_sessions.append(session)
+    return session['id']
+
+def add_message_to_session(session_id, user_msg, assistant_msg):
+    """Add a message to a session"""
+    global chat_sessions
+    if 0 <= session_id < len(chat_sessions):
+        chat_sessions[session_id]['messages'].append({
+            'user': user_msg,
+            'assistant': assistant_msg
+        })
+
+def load_chat_session(session_index):
+    """Load a specific chat session"""
+    global chat_sessions
+    if 0 <= session_index < len(chat_sessions):
+        return chat_sessions[session_index]
+    return None
+
+def clear_all_history(language='en'):
+    """Clear all chat sessions"""
+    global chat_sessions
+    chat_sessions = []
+    return gr.update(choices=[], value=None), TRANSLATIONS[language]['history_cleared']
 
 # ============== MAIN RESPONSE FUNCTIONS ==============
 
-def chat_response(user_input, show_shiny=False, current_pokemon_state=None, language='en'):
-    """Main chat response function with memory and language support."""
-    global search_history, favorites, chat_display_history
+def chat_response(user_input, show_shiny=False, current_pokemon_state=None, language='en', current_session_id=None):
+    """Main chat response function with VS support."""
+    global search_history, favorites, chat_sessions
     
     if not check_domain_compliance(user_input):
         domain_messages = {
@@ -458,23 +472,154 @@ def chat_response(user_input, show_shiny=False, current_pokemon_state=None, lang
         }
         return (
             gr.update(visible=False),
+            gr.update(visible=False),
+            "", 
             "🚫 Domain Restriction", 
             "", "", 
             f"<div style='padding: 20px; color: #f85149;'>{domain_messages[language]}</div>", 
             "", "", "", 
             current_pokemon_state,
-            get_history_html(language), get_favorites_html(language), get_chat_history_html(language), "", gr.update(visible=False)
+            current_session_id,
+            get_history_html(language), 
+            get_favorites_html(language), 
+            gr.update(choices=get_chat_sessions_list(language), value=None),
+            "", 
+            gr.update(visible=False)
         )
 
     if not user_input.strip():
         return (
             gr.update(visible=False), 
+            gr.update(visible=False),
+            "",
             "Please enter a Pokémon name or question!", 
             "", "", "", "", "", "", 
             current_pokemon_state, 
-            get_history_html(language), get_favorites_html(language), get_chat_history_html(language), "", gr.update(visible=False)
+            current_session_id,
+            get_history_html(language), 
+            get_favorites_html(language), 
+            gr.update(choices=get_chat_sessions_list(language), value=None),
+            "", 
+            gr.update(visible=False)
         )
 
+    # Check for VS comparison
+    pokemon1_name, pokemon2_name = extract_vs_pokemon(user_input)
+    
+    if pokemon1_name and pokemon2_name:
+        # VS COMPARISON MODE
+        pokemon1_data = get_pokemon_data(pokemon1_name)
+        pokemon2_data = get_pokemon_data(pokemon2_name)
+        
+        if pokemon1_data and pokemon2_data:
+            # Create new session if needed
+            if current_session_id is None:
+                current_session_id = create_new_chat_session(user_input, language)
+            
+            # Get session history
+            session = load_chat_session(current_session_id)
+            session_history = session['messages'] if session else []
+            
+            # Get AI response
+            input_analysis = analyze_user_input(user_input)
+            user_sentiment = input_analysis.get('sentiment', 'neutral')
+            
+            ai_response = get_intelligent_response(
+                user_input, 
+                [pokemon1_data, pokemon2_data], 
+                user_sentiment, 
+                language,
+                session_history
+            )
+            
+            # Add to session
+            add_message_to_session(current_session_id, user_input, ai_response)
+            
+            # Add to history
+            add_to_history(pokemon1_name)
+            add_to_history(pokemon2_name)
+            
+            # Get sprites with proper fallback handling
+            def get_sprite(data, shiny=False):
+                try:
+                    if shiny:
+                        if 'other' in data['sprites'] and 'official-artwork' in data['sprites']['other']:
+                            sprite = data['sprites']['other']['official-artwork'].get('front_shiny')
+                            if sprite:
+                                return sprite
+                    else:
+                        if 'other' in data['sprites'] and 'official-artwork' in data['sprites']['other']:
+                            sprite = data['sprites']['other']['official-artwork'].get('front_default')
+                            if sprite:
+                                return sprite
+                except (KeyError, TypeError):
+                    pass
+                # Fallback to default sprite
+                return data['sprites'].get('front_default') or data['sprites'].get('front_shiny')
+            
+            sprite1 = get_sprite(pokemon1_data, show_shiny)
+            sprite2 = get_sprite(pokemon2_data, show_shiny)
+            
+            name1 = pokemon1_data['name'].capitalize()
+            name2 = pokemon2_data['name'].capitalize()
+            
+            types1 = [t['type']['name'] for t in pokemon1_data['types']]
+            types2 = [t['type']['name'] for t in pokemon2_data['types']]
+            
+            stats1 = {s['stat']['name']: s['base_stat'] for s in pokemon1_data['stats']}
+            stats2 = {s['stat']['name']: s['base_stat'] for s in pokemon2_data['stats']}
+            
+            type_badges1 = create_type_badges(types1)
+            type_badges2 = create_type_badges(types2)
+            
+            stats_html1 = create_stats_html(stats1)
+            stats_html2 = create_stats_html(stats2)
+            
+            # Create VS display
+            vs_display = f"""
+            <div style="display: grid; grid-template-columns: 1fr auto 1fr; gap: 20px; align-items: center; margin-bottom: 20px;">
+                <div style="text-align: center;">
+                    <h2 style="color: #58a6ff; margin: 10px 0;">{name1}</h2>
+                    <div style="margin: 10px 0;">{type_badges1}</div>
+                    {stats_html1}
+                </div>
+                <div style="font-size: 3rem; font-weight: bold; color: #f85149; text-shadow: 0 0 20px rgba(248,81,73,0.5);">VS</div>
+                <div style="text-align: center;">
+                    <h2 style="color: #a371f7; margin: 10px 0;">{name2}</h2>
+                    <div style="margin: 10px 0;">{type_badges2}</div>
+                    {stats_html2}
+                </div>
+            </div>
+            """
+            
+            answer_html = f'''
+            <div style="padding: 25px; background: rgba(22, 27, 34, 0.9); border-radius: 16px; border: 1px solid rgba(255,255,255,0.1);">
+                <div style="color: #c9d1d9; line-height: 1.8; white-space: pre-wrap;">{ai_response}</div>
+            </div>
+            '''
+            
+            # Ensure sprites are valid URLs
+            sprite1_value = sprite1 if sprite1 and sprite1.startswith('http') else None
+            sprite2_value = sprite2 if sprite2 and sprite2.startswith('http') else None
+            
+            return (
+                gr.update(value=sprite1_value, visible=sprite1_value is not None),
+                gr.update(value=sprite2_value, visible=sprite2_value is not None),
+                vs_display,
+                f"# {name1} VS {name2}",
+                "", "",
+                answer_html,
+                "", "", "",
+                f"{pokemon1_name},{pokemon2_name}",
+                current_session_id,
+                get_history_html(language),
+                get_favorites_html(language),
+                gr.update(choices=get_chat_sessions_list(language), value=None),
+                "",
+                gr.update(visible=False)
+            )
+    
+    # SINGLE POKEMON MODE
     pokemon_name = extract_pokemon_name(user_input)
     
     if not pokemon_name and current_pokemon_state:
@@ -494,18 +639,19 @@ def chat_response(user_input, show_shiny=False, current_pokemon_state=None, lang
         if pokemon_data:
             current_pokemon_state = pokemon_name
             add_to_history(pokemon_name)
-
-    ai_response = get_intelligent_response(user_input, pokemon_data, user_sentiment, language)
     
-    # NEW: Add to chat display history
-    timestamp = datetime.now().strftime("%H:%M")
-    chat_display_history.append({
-        'timestamp': timestamp,
-        'user': user_input,
-        'assistant': ai_response
-    })
-    if len(chat_display_history) > 50:
-        chat_display_history = chat_display_history[-50:]
+    # Create new session if needed
+    if current_session_id is None:
+        current_session_id = create_new_chat_session(user_input, language)
+    
+    # Get session history
+    session = load_chat_session(current_session_id)
+    session_history = session['messages'] if session else []
+
+    ai_response = get_intelligent_response(user_input, pokemon_data, user_sentiment, language, session_history)
+    
+    # Add to session
+    add_message_to_session(current_session_id, user_input, ai_response)
 
     answer_html = f'''
     <div style="padding: 25px; background: rgba(22, 27, 34, 0.9); border-radius: 16px; border: 1px solid rgba(255,255,255,0.1);">
@@ -535,50 +681,64 @@ def chat_response(user_input, show_shiny=False, current_pokemon_state=None, lang
         
         return (
             gr.update(value=sprite, visible=True),
-            f"# {name}", 
-            type_badges, 
-            stats_html, 
+            gr.update(visible=False),
+            "",
+            f"# {name}",
+            type_badges,
+            stats_html,
             answer_html,
             "", "", 
-            cry_url, 
+            cry_url,
             current_pokemon_state,
-            get_history_html(language), 
-            get_favorites_html(language), 
-            get_chat_history_html(language),
-            '<p style="color: #8b949e;">🔊 Pokémon Cry</p>', 
+            current_session_id,
+            get_history_html(language),
+            get_favorites_html(language),
+            gr.update(choices=get_chat_sessions_list(language), value=None),
+            '<p style="color: #8b949e;">🔊 Pokémon Cry</p>',
             gr.update(visible=True)
         )
     else:
         return (
-            gr.update(visible=False), 
-            f"# 💬 {TRANSLATIONS[language]['title']}", 
-            "", "", 
-            answer_html, 
-            "", "", "", 
-            current_pokemon_state, 
-            get_history_html(language), 
-            get_favorites_html(language), 
-            get_chat_history_html(language),
-            "", 
+            gr.update(visible=False),
+            gr.update(visible=False),
+            "",
+            f"# 💬 {TRANSLATIONS[language]['title']}",
+            "", "",
+            answer_html,
+            "", "", "",
+            current_pokemon_state,
+            current_session_id,
+            get_history_html(language),
+            get_favorites_html(language),
+            gr.update(choices=get_chat_sessions_list(language), value=None),
+            "",
             gr.update(visible=False)
         )
 
-def random_pokemon_handler(show_shiny, current_state, language='en'):
+def random_pokemon_handler(show_shiny, current_state, language, session_id):
     """Handle random Pokémon button"""
     random_id = random.randint(1, 898)
     try:
         res = requests.get(f"https://pokeapi.co/api/v2/pokemon/{random_id}")
         if res.status_code == 200:
             name = res.json()['name']
-            return chat_response(name, show_shiny, current_state, language)
+            return chat_response(name, show_shiny, current_state, language, session_id)
     except:
         pass
-    return chat_response("pikachu", show_shiny, current_state, language)
+    return chat_response("pikachu", show_shiny, current_state, language, session_id)
 
 def handle_favorite_toggle(pokemon_name, language='en'):
     if pokemon_name:
-        msg = toggle_favorite(pokemon_name, language)
-        return msg, get_favorites_html(language)
+        # Handle multiple pokemon (VS mode)
+        if ',' in pokemon_name:
+            names = pokemon_name.split(',')
+            messages = []
+            for name in names:
+                messages.append(toggle_favorite(name.strip(), language))
+            return " | ".join(messages), get_favorites_html(language)
+        else:
+            msg = toggle_favorite(pokemon_name, language)
+            return msg, get_favorites_html(language)
     no_selection = {
         'en': "No Pokémon selected!",
         'ms': "Tiada Pokémon dipilih!",
@@ -586,19 +746,38 @@ def handle_favorite_toggle(pokemon_name, language='en'):
     }
     return no_selection[language], get_favorites_html(language)
 
-def change_language(lang, current_state):
-    """Handle language change"""
-    return (
-        get_history_html(lang),
-        get_favorites_html(lang),
-        get_chat_history_html(lang),
-        TRANSLATIONS[lang]['placeholder'],
-        TRANSLATIONS[lang]['send'],
-        TRANSLATIONS[lang]['random'],
-        TRANSLATIONS[lang]['shiny'],
-        TRANSLATIONS[lang]['favorite'],
-        current_state
-    )
+def load_session_from_list(session_choice, language):
+    """Load a chat session when user clicks on it"""
+    global chat_sessions
+    if not session_choice or not chat_sessions:
+        return None, "", []
+    
+    # Extract session index from the choice string
+    try:
+        session_idx = int(session_choice.split(" - ")[0].split(" ")[-1]) if " - " in session_choice else chat_sessions.index([s for s in chat_sessions if f"{s['timestamp']} - {s['title']}" == session_choice][0])
+        
+        # Find the actual session
+        for idx, session in enumerate(chat_sessions):
+            if f"{session['timestamp']} - {session['title']}" == session_choice:
+                session_idx = idx
+                break
+        
+        session = chat_sessions[session_idx]
+        
+        # Return the session ID and reconstruct the conversation
+        if session['messages']:
+            last_msg = session['messages'][-1]
+            # Get the last user input to show
+            last_user_input = last_msg['user']
+            return session_idx, last_user_input, session['messages']
+        
+        return session_idx, "", session['messages']
+    except:
+        return None, "", []
+
+def start_new_chat():
+    """Start a new chat session"""
+    return None, "", gr.update(choices=get_chat_sessions_list('en'), value=None)
 
 # ============== BUILD GRADIO UI ==============
 
@@ -606,6 +785,7 @@ with gr.Blocks(title="Pokémon Battle Assistant") as demo:
     
     current_pokemon_state = gr.State(None)
     language_state = gr.State('en')
+    current_session_id = gr.State(None)
     
     gr.HTML("""
         <style>
@@ -643,7 +823,7 @@ with gr.Blocks(title="Pokémon Battle Assistant") as demo:
             audio { width: 100%; margin-top: 10px; }
         </style>
         
-        <div style="text-align: center; padding: 40px 20px 30px;">
+        <div style="text-align: center; padding: 40px 20px 30px; position: relative;">
             <h1 style="font-size: 2.5rem; font-weight: 700; color: #ffffff; margin-bottom: 8px; letter-spacing: -0.5px;">
                 <span style="color: #ffcb05;">⚡</span> PokéAssistant <span style="color: #ffcb05;">⚡</span>
             </h1>
@@ -653,15 +833,21 @@ with gr.Blocks(title="Pokémon Battle Assistant") as demo:
         </div>
     """)
     
-    # Language selector at top
-    with gr.Row():
-        with gr.Column(scale=1):
-            pass
-        with gr.Column(scale=2):
-            with gr.Row():
-                lang_en = gr.Button("🇬🇧 English", size="sm", variant="secondary")
-                lang_ms = gr.Button("🇲🇾 Bahasa Melayu", size="sm", variant="secondary")
-                lang_zh = gr.Button("🇨🇳 中文", size="sm", variant="secondary")
+    # Language selector dropdown at top right
+    with gr.Row(elem_classes="language-selector-row"):
+        language_dropdown = gr.Dropdown(
+            choices=[
+                ("🇬🇧", "en"),
+                ("🇲🇾", "ms"),
+                ("🇨🇳", "zh")
+            ],
+            value="en",
+            label="",
+            interactive=True,
+            container=False,
+            elem_classes="language-selector",
+            scale=0
+        )
     
     with gr.Row(equal_height=False):
         with gr.Column(scale=1, min_width=300):
@@ -672,8 +858,9 @@ with gr.Blocks(title="Pokémon Battle Assistant") as demo:
                     </div>
                 </div>
             ''')
+            
             user_input = gr.Textbox(
-                placeholder="Ask me anything! 'Who is Garchomp?', 'What are its moves?', 'Build a team'",
+                placeholder="Ask me anything! 'Who is Garchomp?', 'Pikachu vs Diglett'",
                 label="",
                 show_label=False,
                 container=False,
@@ -695,10 +882,20 @@ with gr.Blocks(title="Pokémon Battle Assistant") as demo:
             gr.HTML('<p style="color: #8b949e; margin: 24px 0 12px; font-size: 0.85rem; font-weight: 500;">❤️ FAVORITES</p>')
             favorites_output = gr.HTML(get_favorites_html('en'))
             
-            # NEW: Chat History Section
+            # Chat History Section
             chat_history_header = gr.HTML('<p style="color: #8b949e; margin: 24px 0 12px; font-size: 0.85rem; font-weight: 500;">💬 CHAT HISTORY</p>')
-            clear_history_btn = gr.Button("🗑️ Clear History", variant="secondary", size="sm")
-            chat_history_output = gr.HTML(get_chat_history_html('en'))
+            
+            with gr.Row():
+                new_chat_btn = gr.Button("➕ New Chat", variant="secondary", size="sm")
+                clear_history_btn = gr.Button("🗑️ Clear All", variant="secondary", size="sm")
+            
+            chat_history_list = gr.Dropdown(
+                choices=get_chat_sessions_list('en'),
+                label="Previous Chats",
+                interactive=True,
+                value=None,
+                allow_custom_value=True
+            )
         
         with gr.Column(scale=2, min_width=500):
             gr.HTML('''
@@ -712,10 +909,12 @@ with gr.Blocks(title="Pokémon Battle Assistant") as demo:
             
             with gr.Row(equal_height=True) as pokemon_info_row:
                 sprite_output = gr.Image(label="", show_label=False, height=220, width=220, container=False, visible=False)
-                with gr.Column():
-                    name_output = gr.Markdown("", elem_id="pokemon-name")
-                    type_output = gr.HTML("")
-                    stats_output = gr.HTML("")
+                sprite_output2 = gr.Image(label="", show_label=False, height=220, width=220, container=False, visible=False)
+            
+            vs_display_output = gr.HTML("")
+            name_output = gr.Markdown("", elem_id="pokemon-name")
+            type_output = gr.HTML("")
+            stats_output = gr.HTML("")
             
             cry_section = gr.HTML('', visible=False)
             cry_audio = gr.Audio(label="", show_label=False, type="filepath", visible=False)
@@ -727,37 +926,81 @@ with gr.Blocks(title="Pokémon Battle Assistant") as demo:
             extra_output = gr.Markdown(visible=False)
     
     outputs = [
-        sprite_output, name_output, type_output, stats_output, 
-        desc_output, counter_output, extra_output, 
-        cry_url_hidden, current_pokemon_state, 
-        history_output, favorites_output, chat_history_output,
+        sprite_output, sprite_output2, vs_display_output, name_output, 
+        type_output, stats_output, desc_output, 
+        counter_output, extra_output, cry_url_hidden, 
+        current_pokemon_state, current_session_id,
+        history_output, favorites_output, chat_history_list,
         cry_section, cry_audio
     ]
     
     # Event handlers
-    def chat_with_lang(user_input, show_shiny, current_state, lang):
-        return chat_response(user_input, show_shiny, current_state, lang)
+    def chat_with_lang(user_input, show_shiny, current_state, lang, session_id):
+        return chat_response(user_input, show_shiny, current_state, lang, session_id)
     
-    search_btn.click(fn=chat_with_lang, inputs=[user_input, shiny_toggle, current_pokemon_state, language_state], outputs=outputs)
-    user_input.submit(fn=chat_with_lang, inputs=[user_input, shiny_toggle, current_pokemon_state, language_state], outputs=outputs)
+    search_btn.click(
+        fn=chat_with_lang, 
+        inputs=[user_input, shiny_toggle, current_pokemon_state, language_state, current_session_id], 
+        outputs=outputs
+    )
     
-    random_btn.click(fn=random_pokemon_handler, inputs=[shiny_toggle, current_pokemon_state, language_state], outputs=outputs)
+    user_input.submit(
+        fn=chat_with_lang, 
+        inputs=[user_input, shiny_toggle, current_pokemon_state, language_state, current_session_id], 
+        outputs=outputs
+    )
     
-    favorite_btn.click(fn=handle_favorite_toggle, inputs=[current_pokemon_state, language_state], outputs=[favorite_status, favorites_output])
+    random_btn.click(
+        fn=random_pokemon_handler, 
+        inputs=[shiny_toggle, current_pokemon_state, language_state, current_session_id], 
+        outputs=outputs
+    )
     
-    # NEW: Clear history button
-    clear_history_btn.click(fn=clear_chat_history, inputs=[language_state], outputs=[chat_history_output, favorite_status])
+    favorite_btn.click(
+        fn=handle_favorite_toggle, 
+        inputs=[current_pokemon_state, language_state], 
+        outputs=[favorite_status, favorites_output]
+    )
+    
+    # New chat button
+    new_chat_btn.click(
+        fn=start_new_chat,
+        outputs=[current_session_id, user_input, chat_history_list]
+    )
+    
+    # Clear all history
+    clear_history_btn.click(
+        fn=clear_all_history,
+        inputs=[language_state],
+        outputs=[chat_history_list, favorite_status]
+    )
+    
+    # Load session from dropdown
+    def load_selected_session(choice, lang):
+        session_idx, last_input, messages = load_session_from_list(choice, lang)
+        return session_idx, last_input
+    
+    chat_history_list.change(
+        fn=load_selected_session,
+        inputs=[chat_history_list, language_state],
+        outputs=[current_session_id, user_input]
+    )
     
     # Language switching
-    def set_language(lang, current_state):
-        result = change_language(lang, current_state)
-        return result + (lang,)
+    def update_language(lang):
+        return (
+            lang,
+            get_history_html(lang),
+            get_favorites_html(lang),
+            gr.update(choices=get_chat_sessions_list(lang), value=None),
+            TRANSLATIONS[lang]['placeholder']
+        )
     
-    lang_outputs = [history_output, favorites_output, chat_history_output, user_input, search_btn, random_btn, shiny_toggle, favorite_btn, current_pokemon_state, language_state]
-    
-    lang_en.click(fn=lambda cs: set_language('en', cs), inputs=[current_pokemon_state], outputs=lang_outputs)
-    lang_ms.click(fn=lambda cs: set_language('ms', cs), inputs=[current_pokemon_state], outputs=lang_outputs)
-    lang_zh.click(fn=lambda cs: set_language('zh', cs), inputs=[current_pokemon_state], outputs=lang_outputs)
+    language_dropdown.change(
+        fn=update_language,
+        inputs=[language_dropdown],
+        outputs=[language_state, history_output, favorites_output, chat_history_list, user_input]
+    )
     
     def update_cry(url):
         if url and url.startswith('http'):

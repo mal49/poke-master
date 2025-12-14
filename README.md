@@ -157,7 +157,7 @@ GEMINI_API_KEY=your_gemini_api_key_here
 
 - **[Gradio](https://gradio.app/)** - Web UI framework (v4.0+)
 - **[PokeAPI](https://pokeapi.co/)** - Comprehensive Pokémon data API
-- **[Google Gemini AI](https://ai.google.dev/)** - AI-powered conversational responses (Gemini 2.0 Flash Exp)
+- **[Google Gemini AI](https://ai.google.dev/)** - AI-powered conversational responses (Gemini 2.5 Flash Lite)
 - **[python-dotenv](https://pypi.org/project/python-dotenv/)** - Environment variable management
 - **[Requests](https://requests.readthedocs.io/)** - HTTP library for API calls
 
